@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 
 from app.database import Base, engine
-from app.models import User, Workspace, Project, Task
+from app.models import User, Workspace, Project, Task, Comment
 
 from app.routes.auth_routes import router as auth_router
 from app.routes.workspace_routes import router as workspace_router
 from app.routes.project_routes import router as project_router
 from app.routes.task_routes import router as task_router
+from app.routes.comment_routes import router as comment_router
 
 Base.metadata.create_all(bind=engine)
 
