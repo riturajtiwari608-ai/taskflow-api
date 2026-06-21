@@ -11,6 +11,12 @@ from app.schemas.project_schema import (
     ProjectResponse
 )
 from app.utils.security import get_current_user
+from app.utils.permissions import (
+    get_workspace_member,
+    require_workspace_roles,
+    get_project_with_access,
+    require_project_roles
+)
 
 router = APIRouter(
     prefix="/projects",
@@ -24,16 +30,12 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    workspace = db.query(Workspace).filter(
-        Workspace.id == project_data.workspace_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not workspace:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found or access denied"
-        )
+    require_workspace_roles(
+        workspace_id=project_data.workspace_id,
+        allowed_roles=["admin", "manager"],
+        current_user=current_user,
+        db=db
+    )
 
     project = Project(
         name=project_data.name,
@@ -53,11 +55,24 @@ def get_my_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    projects = db.query(Project).join(Workspace).filter(
-        Workspace.owner_id == current_user.id
+    user_workspace_ids = [
+        membership.workspace_id
+        for membership in current_user_workspace_memberships(db, current_user)
+    ]
+
+    projects = db.query(Project).filter(
+        Project.workspace_id.in_(user_workspace_ids)
     ).all()
 
     return projects
+
+
+def current_user_workspace_memberships(db: Session, current_user: User):
+    from app.models.workspace_member import WorkspaceMember
+
+    return db.query(WorkspaceMember).filter(
+        WorkspaceMember.user_id == current_user.id
+    ).all()
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -66,16 +81,11 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    project = db.query(Project).join(Workspace).filter(
-        Project.id == project_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+    project, member = get_project_with_access(
+        project_id=project_id,
+        current_user=current_user,
+        db=db
+    )
 
     return project
 
@@ -87,16 +97,12 @@ def update_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    project = db.query(Project).join(Workspace).filter(
-        Project.id == project_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+    project, member = require_project_roles(
+        project_id=project_id,
+        allowed_roles=["admin", "manager"],
+        current_user=current_user,
+        db=db
+    )
 
     if project_data.name is not None:
         project.name = project_data.name
@@ -119,16 +125,12 @@ def delete_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    project = db.query(Project).join(Workspace).filter(
-        Project.id == project_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+    project, member = require_project_roles(
+        project_id=project_id,
+        allowed_roles=["admin"],
+        current_user=current_user,
+        db=db
+    )
 
     db.delete(project)
     db.commit()
