@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.models.workspace import Workspace
+from app.models.workspace_member import WorkspaceMember
 from app.models.project import Project
 from app.models.task import Task
 from app.schemas.task_schema import (
@@ -15,26 +15,16 @@ from app.schemas.task_schema import (
     TaskResponse
 )
 from app.utils.security import get_current_user
+from app.utils.permissions import (
+    require_project_roles,
+    get_task_with_access,
+    require_task_roles
+)
 
 router = APIRouter(
     prefix="/tasks",
     tags=["Tasks"]
 )
-
-
-def check_project_access(project_id: int, db: Session, current_user: User):
-    project = db.query(Project).join(Workspace).filter(
-        Project.id == project_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found or access denied"
-        )
-
-    return project
 
 
 @router.post("/", response_model=TaskResponse)
@@ -43,7 +33,12 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    check_project_access(task_data.project_id, db, current_user)
+    require_project_roles(
+        project_id=task_data.project_id,
+        allowed_roles=["admin", "manager"],
+        current_user=current_user,
+        db=db
+    )
 
     task = Task(
         title=task_data.title,
@@ -75,8 +70,14 @@ def get_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Task).join(Project).join(Workspace).filter(
-        Workspace.owner_id == current_user.id
+    memberships = db.query(WorkspaceMember).filter(
+        WorkspaceMember.user_id == current_user.id
+    ).all()
+
+    workspace_ids = [membership.workspace_id for membership in memberships]
+
+    query = db.query(Task).join(Project).filter(
+        Project.workspace_id.in_(workspace_ids)
     )
 
     if project_id:
@@ -107,16 +108,11 @@ def get_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).join(Project).join(Workspace).filter(
-        Task.id == task_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
+    task, project, member = get_task_with_access(
+        task_id=task_id,
+        current_user=current_user,
+        db=db
+    )
 
     return task
 
@@ -128,16 +124,12 @@ def update_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).join(Project).join(Workspace).filter(
-        Task.id == task_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
+    task, project, member = require_task_roles(
+        task_id=task_id,
+        allowed_roles=["admin", "manager"],
+        current_user=current_user,
+        db=db
+    )
 
     if task_data.title is not None:
         task.title = task_data.title
@@ -169,16 +161,12 @@ def delete_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).join(Project).join(Workspace).filter(
-        Task.id == task_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
+    task, project, member = require_task_roles(
+        task_id=task_id,
+        allowed_roles=["admin"],
+        current_user=current_user,
+        db=db
+    )
 
     db.delete(task)
     db.commit()

@@ -3,9 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.models.workspace import Workspace
-from app.models.project import Project
-from app.models.task import Task
 from app.models.comment import Comment
 from app.schemas.comment_schema import (
     CommentCreate,
@@ -13,26 +10,11 @@ from app.schemas.comment_schema import (
     CommentResponse
 )
 from app.utils.security import get_current_user
-
+from app.utils.permissions import get_task_with_access
 
 router = APIRouter(
     tags=["Comments"]
 )
-
-
-def check_task_access(task_id: int, db: Session, current_user: User):
-    task = db.query(Task).join(Project).join(Workspace).filter(
-        Task.id == task_id,
-        Workspace.owner_id == current_user.id
-    ).first()
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found or access denied"
-        )
-
-    return task
 
 
 @router.post("/tasks/{task_id}/comments", response_model=CommentResponse)
@@ -42,7 +24,11 @@ def create_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    check_task_access(task_id, db, current_user)
+    get_task_with_access(
+        task_id=task_id,
+        current_user=current_user,
+        db=db
+    )
 
     comment = Comment(
         content=comment_data.content,
@@ -63,7 +49,11 @@ def get_task_comments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    check_task_access(task_id, db, current_user)
+    get_task_with_access(
+        task_id=task_id,
+        current_user=current_user,
+        db=db
+    )
 
     comments = db.query(Comment).filter(
         Comment.task_id == task_id
@@ -79,16 +69,21 @@ def update_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    comment = db.query(Comment).join(Task).join(Project).join(Workspace).filter(
-        Comment.id == comment_id,
-        Workspace.owner_id == current_user.id
+    comment = db.query(Comment).filter(
+        Comment.id == comment_id
     ).first()
 
     if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Comment not found or access denied"
+            detail="Comment not found"
         )
+
+    get_task_with_access(
+        task_id=comment.task_id,
+        current_user=current_user,
+        db=db
+    )
 
     if comment.user_id != current_user.id:
         raise HTTPException(
@@ -111,16 +106,21 @@ def delete_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    comment = db.query(Comment).join(Task).join(Project).join(Workspace).filter(
-        Comment.id == comment_id,
-        Workspace.owner_id == current_user.id
+    comment = db.query(Comment).filter(
+        Comment.id == comment_id
     ).first()
 
     if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Comment not found or access denied"
+            detail="Comment not found"
         )
+
+    get_task_with_access(
+        task_id=comment.task_id,
+        current_user=current_user,
+        db=db
+    )
 
     if comment.user_id != current_user.id:
         raise HTTPException(
