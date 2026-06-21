@@ -1,13 +1,14 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
 from app.models.workspace_member import WorkspaceMember
 from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.task import Task
 from app.schemas.task_schema import (
     TaskCreate,
@@ -18,7 +19,8 @@ from app.utils.security import get_current_user
 from app.utils.permissions import (
     require_project_roles,
     get_task_with_access,
-    require_task_roles
+    require_task_roles,
+    get_project_with_access
 )
 
 router = APIRouter(
@@ -74,13 +76,30 @@ def get_tasks(
         WorkspaceMember.user_id == current_user.id
     ).all()
 
-    workspace_ids = [membership.workspace_id for membership in memberships]
+    admin_manager_workspace_ids = [
+        membership.workspace_id
+        for membership in memberships
+        if membership.role in ["admin", "manager"]
+    ]
+
+    member_project_ids = [
+        project_member.project_id
+        for project_member in db.query(ProjectMember).filter(
+            ProjectMember.user_id == current_user.id
+        ).all()
+    ]
 
     query = db.query(Task).join(Project).filter(
-        Project.workspace_id.in_(workspace_ids)
+        (Project.workspace_id.in_(admin_manager_workspace_ids)) |
+        (Task.project_id.in_(member_project_ids))
     )
 
     if project_id:
+        get_project_with_access(
+            project_id=project_id,
+            current_user=current_user,
+            db=db
+        )
         query = query.filter(Task.project_id == project_id)
 
     if status_filter:

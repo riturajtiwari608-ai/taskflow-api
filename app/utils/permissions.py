@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.workspace_member import WorkspaceMember
 from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.task import Task
 
 
@@ -85,11 +86,7 @@ def require_workspace_roles(
     return member
 
 
-def get_project_with_access(
-    project_id: int,
-    current_user: User,
-    db: Session
-):
+def get_project_or_404(project_id: int, db: Session):
     project = db.query(Project).filter(
         Project.id == project_id
     ).first()
@@ -100,13 +97,41 @@ def get_project_with_access(
             detail="Project not found"
         )
 
-    member = get_workspace_member(
+    return project
+
+
+def is_project_member(project_id: int, user_id: int, db: Session) -> bool:
+    project_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id
+    ).first()
+
+    return project_member is not None
+
+
+def get_project_with_access(
+    project_id: int,
+    current_user: User,
+    db: Session
+):
+    project = get_project_or_404(project_id, db)
+
+    workspace_member = get_workspace_member(
         workspace_id=project.workspace_id,
         current_user=current_user,
         db=db
     )
 
-    return project, member
+    if workspace_member.role in ["admin", "manager"]:
+        return project, workspace_member
+
+    if not is_project_member(project_id, current_user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project"
+        )
+
+    return project, workspace_member
 
 
 def require_project_roles(
@@ -115,15 +140,21 @@ def require_project_roles(
     current_user: User,
     db: Session
 ):
-    project, member = get_project_with_access(project_id, current_user, db)
+    project = get_project_or_404(project_id, db)
 
-    if member.role not in allowed_roles:
+    workspace_member = get_workspace_member(
+        workspace_id=project.workspace_id,
+        current_user=current_user,
+        db=db
+    )
+
+    if workspace_member.role not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action"
         )
 
-    return project, member
+    return project, workspace_member
 
 
 def get_task_with_access(
@@ -141,13 +172,13 @@ def get_task_with_access(
             detail="Task not found"
         )
 
-    project, member = get_project_with_access(
+    project, workspace_member = get_project_with_access(
         project_id=task.project_id,
         current_user=current_user,
         db=db
     )
 
-    return task, project, member
+    return task, project, workspace_member
 
 
 def require_task_roles(
@@ -156,12 +187,28 @@ def require_task_roles(
     current_user: User,
     db: Session
 ):
-    task, project, member = get_task_with_access(task_id, current_user, db)
+    task = db.query(Task).filter(
+        Task.id == task_id
+    ).first()
 
-    if member.role not in allowed_roles:
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    project = get_project_or_404(task.project_id, db)
+
+    workspace_member = get_workspace_member(
+        workspace_id=project.workspace_id,
+        current_user=current_user,
+        db=db
+    )
+
+    if workspace_member.role not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action"
         )
 
-    return task, project, member
+    return task, project, workspace_member
