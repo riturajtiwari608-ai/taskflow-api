@@ -156,7 +156,7 @@ def add_workspace_member(
         db=db
     )
 
-    role = validate_role(member_data.role)
+    role = validate_role(member_data.role.value)
 
     user_to_add = db.query(User).filter(
         User.email == member_data.email
@@ -222,7 +222,7 @@ def update_workspace_member_role(
         db=db
     )
 
-    role = validate_role(member_data.role)
+    role = validate_role(member_data.role.value)
 
     member = db.query(WorkspaceMember).filter(
         WorkspaceMember.workspace_id == workspace_id,

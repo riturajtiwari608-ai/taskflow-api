@@ -6,13 +6,17 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.password_reset_token import PasswordResetToken
 from app.schemas.user_schema import (
     UserRegister,
     UserLogin,
     UserResponse,
     TokenResponse,
     RefreshTokenRequest,
-    LogoutRequest
+    LogoutRequest,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest
 )
 from app.utils.security import (
     hash_password,
@@ -20,6 +24,8 @@ from app.utils.security import (
     create_access_token,
     create_refresh_token,
     get_refresh_token_expiry,
+    create_password_reset_token,
+    get_password_reset_token_expiry,
     get_current_user
 )
 from app.config import ACCESS_TOKEN_EXPIRE_MINUTES
@@ -116,7 +122,7 @@ def refresh_access_token(
             detail="Refresh token has been revoked"
         )
 
-    if stored_token.expires_at < datetime.now(timezone.utc):
+    if stored_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired"
@@ -177,6 +183,94 @@ def logout_user(
     db.commit()
 
     return {"message": "Logged out successfully"}
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(
+    request_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == request_data.email
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email does not exist"
+        )
+
+    reset_token_value = create_password_reset_token()
+
+    reset_token = PasswordResetToken(
+        token=reset_token_value,
+        user_id=user.id,
+        expires_at=get_password_reset_token_expiry()
+    )
+
+    db.add(reset_token)
+    db.commit()
+
+    return {
+        "message": "Password reset token generated successfully",
+        "reset_token": reset_token_value
+    }
+
+
+@router.post("/reset-password")
+def reset_password(
+    request_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    stored_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == request_data.reset_token
+    ).first()
+
+    if not stored_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid reset token"
+        )
+
+    if stored_token.is_used:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Reset token has already been used"
+        )
+
+    if stored_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Reset token has expired"
+        )
+
+    user = db.query(User).filter(
+        User.id == stored_token.user_id
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    user.hashed_password = hash_password(request_data.new_password)
+
+    stored_token.is_used = True
+
+    user_refresh_tokens = db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.is_revoked == False
+    ).all()
+
+    for token in user_refresh_tokens:
+        token.is_revoked = True
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully. Please login again."
+    }
 
 
 @router.get("/me", response_model=UserResponse)

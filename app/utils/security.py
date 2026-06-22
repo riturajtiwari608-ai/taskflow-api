@@ -12,7 +12,8 @@ from app.config import (
     SECRET_KEY,
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_MINUTES,
-    REFRESH_TOKEN_EXPIRE_DAYS
+    REFRESH_TOKEN_EXPIRE_DAYS,
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
 )
 from app.database import get_db
 from app.models.user import User
@@ -65,6 +66,16 @@ def create_refresh_token() -> str:
 def get_refresh_token_expiry():
     return datetime.now(timezone.utc) + timedelta(
         days=REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+
+def create_password_reset_token() -> str:
+    return secrets.token_urlsafe(64)
+
+
+def get_password_reset_token_expiry():
+    return datetime.now(timezone.utc) + timedelta(
+        minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
     )
 
 

@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 
 class CommentCreate(BaseModel):
-    content: str
+    content: str = Field(min_length=1, max_length=1000)
 
 
 class CommentUpdate(BaseModel):
-    content: Optional[str] = None
+    content: Optional[str] = Field(default=None, min_length=1, max_length=1000)
 
 
 class CommentResponse(BaseModel):

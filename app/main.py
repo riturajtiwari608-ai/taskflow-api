@@ -9,7 +9,8 @@ from app.models import (
     ProjectMember,
     Task,
     Comment,
-    RefreshToken
+    RefreshToken,
+    PasswordResetToken
 )
 
 from app.routes.auth_routes import router as auth_router
@@ -23,7 +24,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="TaskFlow API",
     description="A team task management backend inspired by Jira and Trello",
-    version="2.4.0"
+    version="3.1.0"
 )
 
 
@@ -32,7 +33,7 @@ def home():
     return {
         "message": "Welcome to TaskFlow API",
         "docs": "/docs",
-        "version": "2.4.0"
+        "version": "3.1.0"
     }
 
 

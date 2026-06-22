@@ -1,6 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.constants.enums import UserRole
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.workspace_member import WorkspaceMember
@@ -9,13 +10,16 @@ from app.models.project_member import ProjectMember
 from app.models.task import Task
 
 
+
 VALID_ROLES = ["admin", "manager", "member"]
 
 
 def validate_role(role: str):
     role = role.lower()
 
-    if role not in VALID_ROLES:
+    valid_roles = [user_role.value for user_role in UserRole]
+
+    if role not in valid_roles:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid role. Role must be admin, manager, or member"

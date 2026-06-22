@@ -1,16 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
 class ProjectCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    workspace_id: int
+    name: str = Field(min_length=3, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
+    workspace_id: int = Field(gt=0)
 
 
 class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=3, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
     is_archived: Optional[bool] = None
 
 

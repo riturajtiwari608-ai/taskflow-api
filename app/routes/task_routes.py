@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 
+from app.constants.enums import TaskPriority, TaskStatus
 from app.database import get_db
 from app.models.user import User
 from app.models.workspace_member import WorkspaceMember
@@ -45,8 +46,8 @@ def create_task(
     task = Task(
         title=task_data.title,
         description=task_data.description,
-        priority=task_data.priority,
-        status=task_data.status,
+        priority=task_data.priority.value,
+        status=task_data.status.value,
         due_date=task_data.due_date,
         project_id=task_data.project_id,
         assignee_id=task_data.assignee_id,
@@ -62,13 +63,13 @@ def create_task(
 
 @router.get("/", response_model=list[TaskResponse])
 def get_tasks(
-    project_id: Optional[int] = None,
-    status_filter: Optional[str] = Query(None, alias="status"),
-    priority: Optional[str] = None,
-    assignee_id: Optional[int] = None,
+    project_id: Optional[int] = Query(None, gt=0),
+    status_filter: Optional[TaskStatus] = Query(None, alias="status"),
+    priority: Optional[TaskPriority] = None,
+    assignee_id: Optional[int] = Query(None, gt=0),
     due_date: Optional[date] = None,
-    page: int = 1,
-    limit: int = 10,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -103,10 +104,10 @@ def get_tasks(
         query = query.filter(Task.project_id == project_id)
 
     if status_filter:
-        query = query.filter(Task.status == status_filter)
+        query = query.filter(Task.status == status_filter.value)
 
     if priority:
-        query = query.filter(Task.priority == priority)
+        query = query.filter(Task.priority == priority.value)
 
     if assignee_id:
         query = query.filter(Task.assignee_id == assignee_id)
@@ -157,10 +158,10 @@ def update_task(
         task.description = task_data.description
 
     if task_data.priority is not None:
-        task.priority = task_data.priority
+        task.priority = task_data.priority.value
 
     if task_data.status is not None:
-        task.status = task_data.status
+        task.status = task_data.status.value
 
     if task_data.due_date is not None:
         task.due_date = task_data.due_date
