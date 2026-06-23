@@ -1,3 +1,4 @@
+from app.cache import get_cache, set_cache, delete_cache
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -182,9 +183,6 @@ def logout_user(
 
     db.commit()
 
-    return {"message": "Logged out successfully"}
-
-
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(
     request_data: ForgotPasswordRequest,
@@ -255,7 +253,7 @@ def reset_password(
         )
 
     user.hashed_password = hash_password(request_data.new_password)
-
+    delete_cache(f"user_profile:{user.id}")
     stored_token.is_used = True
 
     user_refresh_tokens = db.query(RefreshToken).filter(
@@ -275,4 +273,19 @@ def reset_password(
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    cache_key = f"user_profile:{current_user.id}"
+
+    cached_user = get_cache(cache_key)
+
+    if cached_user:
+        return cached_user
+
+    user_data = {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email
+    }
+
+    set_cache(cache_key, user_data)
+
+    return user_data

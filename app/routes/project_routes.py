@@ -1,3 +1,4 @@
+from app.cache import get_cache, set_cache, delete_cache
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -122,7 +123,24 @@ def get_project(
         db=db
     )
 
-    return project
+    cache_key = f"project:{project_id}"
+
+    cached_project = get_cache(cache_key)
+
+    if cached_project:
+        return cached_project
+
+    project_data = {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "workspace_id": project.workspace_id,
+        "is_archived": project.is_archived
+    }
+
+    set_cache(cache_key, project_data)
+
+    return project_data
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -150,7 +168,7 @@ def update_project(
 
     db.commit()
     db.refresh(project)
-
+    delete_cache(f"project:{project_id}")
     return project
 
 
@@ -169,7 +187,7 @@ def delete_project(
 
     db.delete(project)
     db.commit()
-
+    delete_cache(f"project:{project_id}")
     return {"message": "Project deleted successfully"}
 
 
