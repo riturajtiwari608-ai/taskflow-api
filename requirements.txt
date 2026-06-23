@@ -8,3 +8,6 @@ PyJWT
 python-multipart
 email-validator
 redis
+pytest
+httpx
+bcrypt
