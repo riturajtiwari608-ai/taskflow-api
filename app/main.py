@@ -24,7 +24,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="TaskFlow API",
     description="A team task management backend inspired by Jira and Trello",
-    version="3.1.0"
+    version="3.3.0"
 )
 
 
@@ -33,7 +33,7 @@ def home():
     return {
         "message": "Welcome to TaskFlow API",
         "docs": "/docs",
-        "version": "3.1.0"
+        "version": "3.3.0"
     }
 
 

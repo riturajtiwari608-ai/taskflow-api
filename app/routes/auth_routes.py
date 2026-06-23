@@ -29,7 +29,17 @@ from app.utils.security import (
     get_password_reset_token_expiry,
     get_current_user
 )
-from app.config import ACCESS_TOKEN_EXPIRE_MINUTES
+from fastapi import Request
+from app.utils.rate_limiter import rate_limit
+from app.config import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    LOGIN_RATE_LIMIT,
+    REGISTER_RATE_LIMIT,
+    FORGOT_PASSWORD_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_SECONDS
+)
+
+# from app.config import ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 router = APIRouter(
@@ -38,8 +48,20 @@ router = APIRouter(
 )
 
 
+
 @router.post("/register", response_model=UserResponse)
-def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+def register_user(
+    request: Request,
+    user_data: UserRegister,
+    db: Session = Depends(get_db)
+):
+    rate_limit(
+        request=request,
+        key_prefix="register",
+        limit=REGISTER_RATE_LIMIT,
+        window_seconds=RATE_LIMIT_WINDOW_SECONDS
+    )
+
     existing_user = db.query(User).filter(User.email == user_data.email).first()
 
     if existing_user:
@@ -60,9 +82,18 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
 
     return new_user
 
-
 @router.post("/login", response_model=TokenResponse)
-def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
+def login_user(
+    request: Request,
+    user_data: UserLogin,
+    db: Session = Depends(get_db)
+):
+    rate_limit(
+        request=request,
+        key_prefix="login",
+        limit=LOGIN_RATE_LIMIT,
+        window_seconds=RATE_LIMIT_WINDOW_SECONDS
+    )
     user = db.query(User).filter(User.email == user_data.email).first()
 
     if not user:
@@ -185,9 +216,17 @@ def logout_user(
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(
+    request: Request,
     request_data: ForgotPasswordRequest,
     db: Session = Depends(get_db)
 ):
+    rate_limit(
+        request=request,
+        key_prefix="forgot_password",
+        limit=FORGOT_PASSWORD_RATE_LIMIT,
+        window_seconds=RATE_LIMIT_WINDOW_SECONDS
+    )
+
     user = db.query(User).filter(
         User.email == request_data.email
     ).first()
