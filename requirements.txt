@@ -10,5 +10,6 @@ email-validator
 redis
 pytest
 httpx
-# passlib 1.7.4 is incompatible with bcrypt 5.x.
-bcrypt
+# passlib 1.7.4 is incompatible with bcrypt 5.x. bcrypt 5 causes password
+# hashing to fail at runtime, which makes /auth/register return HTTP 500.
+bcrypt>=4.0,<5
